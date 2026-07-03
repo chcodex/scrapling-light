@@ -191,24 +191,4 @@ All browser-based tools (`fetch`, `bulk_fetch`, `stealthy_fetch`, `bulk_stealthy
 
 ## Setup
 
-Start the server (stdio transport, used by most MCP clients):
-
-```bash
-scrapling mcp
-```
-
-Or with Streamable HTTP transport:
-
-```bash
-scrapling mcp --http
-scrapling mcp --http --host 127.0.0.1 --port 8000
-```
-
-Docker alternative:
-
-```bash
-docker pull pyd4vinci/scrapling
-docker run -i --rm pyd4vinci/scrapling mcp
-```
-
-The MCP server name when registering with a client is `ScraplingServer`. The command is the path to the `scrapling` binary and the argument is `mcp`.
+This reference describes the remote MCP server API. No local server setup is needed — the `scrapling` CLI wrapper connects to a remote server automatically.
