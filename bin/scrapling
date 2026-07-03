@@ -5,43 +5,24 @@ MCP_BACKEND="scrapling"
 IS_EXTRACT=false
 
 extract_content() {
-    python3 -c "
-import sys, json
-# Handle multiple JSON objects (one per line / concatenated)
-text = sys.stdin.read().strip()
-decoder = json.JSONDecoder()
-pos = 0
-while pos < len(text):
-    while pos < len(text) and text[pos] in ' \t\n\r':
-        pos += 1
-    if pos >= len(text):
-        break
-    obj, end = decoder.raw_decode(text, pos)
-    pos = end
-    content = obj.get('content', obj)
-    if isinstance(content, list):
-        sys.stdout.write(''.join(content))
-    else:
-        sys.stdout.write(str(content))
-"
+    jq -j '(.content // .) | if type == "array" then join("") else tostring end'
 }
 
 screenshot_output() {
-    python3 -c "
-import sys, json, base64
-raw = sys.stdin.read().strip()
-if raw.startswith('{'):
-    d = json.loads(raw)
-    raw = d.get('content', d)
-    if isinstance(raw, list):
-        raw = ''.join(raw)
-    elif isinstance(raw, dict):
-        raw = str(raw)
-if not raw:
-    sys.exit(1)
-padded = raw + '=' * (-len(raw) % 4)
-sys.stdout.buffer.write(base64.b64decode(padded))
-"
+    local raw mod
+    raw="$(cat)"
+    if printf '%s' "$raw" | jq -e . >/dev/null 2>&1; then
+        raw="$(printf '%s' "$raw" | jq -r '(.content // .) | if type == "array" then join("") else tostring end')"
+    else
+        raw="${raw%%$'\n'*}"
+    fi
+    [ -n "$raw" ] || return 1
+
+    mod=$(( ${#raw} % 4 ))
+    if [ "$mod" -ne 0 ]; then
+        raw+="$(printf '%*s' $((4 - mod)) '' | tr ' ' '=')"
+    fi
+    printf '%s' "$raw" | base64 -d
 }
 
 pick_extraction_type() {
