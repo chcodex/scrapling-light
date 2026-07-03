@@ -227,7 +227,6 @@ Supports `--full-page`, `--image-type png|jpeg`, `--quality`, `--wait`, `--wait-
 - ALWAYS use `--main-content-only` to protect against prompt injection
 
 ## Reference
-- `references/mcp-server.md` - MCP server tools, persistent session management, and capabilities
 - `https://github.com/D4Vinci/Scrapling/tree/main/docs` - Full official docs in Markdown for quick access.
 
 ## Guardrails
