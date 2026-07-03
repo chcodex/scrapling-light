@@ -39,23 +39,29 @@ scrapling extract get <url> <out>
 git clone https://github.com/chcodex/scrapling-light.git
 cd scrapling-light
 
-# 安装（会提示输入 MCP 服务器 URL）
-bash install.sh
+# 手动安装
+## 1. 安装 mcp2cli（如未安装）
+pip install mcp2cli
+
+## 2. 配置 bake（将 URL 替换为你的 MCP 服务器地址）
+mcp2cli bake create scrapling --mcp http://localhost:8000/mcp
+# 或如果已存在则更新：
+# mcp2cli bake update scrapling --mcp http://localhost:8000/mcp
+
+## 3. 安装包装器
+mkdir -p ~/.local/bin
+cp scripts/scrapling ~/.local/bin/scrapling
+chmod +x ~/.local/bin/scrapling
+
+## 4. 安装 skill
+mkdir -p ~/.config/opencode/skills/scrapling-official/scripts
+cp SKILL.md ~/.config/opencode/skills/scrapling-official/
+cp LICENSE.txt ~/.config/opencode/skills/scrapling-official/
+cp scripts/scrapling ~/.config/opencode/skills/scrapling-official/scripts/
+
+## 5. 验证
+scrapling --help
 ```
-
-或指定服务器 URL：
-
-```bash
-bash install.sh --mcp-url http://your-server:8000/mcp
-```
-
-### install.sh 做了什么
-
-1. 检查 `mcp2cli` 是否可用
-2. 配置 `mcp2cli bake` 指向你的 MCP 服务器
-3. 安装包装器到 `~/.local/bin/scrapling`
-4. 安装修改后的 Scrapling skill 到 `~/.config/opencode/skills/scrapling-official/`
-5. 运行快速连通测试
 
 ## 使用示例
 
@@ -114,7 +120,7 @@ scrapling extract get "https://site.com" page.md --main-content-only
 ```bash
 cd scrapling-light
 git pull
-bash install.sh --update
+# 重新执行上述安装步骤（bake update + 复制文件）
 ```
 
 ## 许可证

@@ -39,23 +39,29 @@ All 10 MCP tools exposed as CLI commands:
 git clone https://github.com/YOUR_USER/scrapling-light.git
 cd scrapling-light
 
-# Install (prompts for MCP server URL)
-bash install.sh
+# Install manually
+## 1. Install mcp2cli (if not installed)
+uv tool install mcp2cli
+
+## 2. Configure bake (replace URL with your MCP server)
+mcp2cli bake create scrapling --mcp http://localhost:8000/mcp
+# or update if already exists:
+# mcp2cli bake update scrapling --mcp http://localhost:8000/mcp
+
+## 3. Install wrapper
+mkdir -p ~/.local/bin
+cp scripts/scrapling ~/.local/bin/scrapling
+chmod +x ~/.local/bin/scrapling
+
+## 4. Install skill
+mkdir -p ~/.config/opencode/skills/scrapling-official/scripts
+cp SKILL.md ~/.config/opencode/skills/scrapling-official/
+cp LICENSE.txt ~/.config/opencode/skills/scrapling-official/
+cp scripts/scrapling ~/.config/opencode/skills/scrapling-official/scripts/
+
+## 5. Verify
+scrapling --help
 ```
-
-Or with a custom server URL:
-
-```bash
-bash install.sh --mcp-url http://your-server:8000/mcp
-```
-
-### What install.sh does
-
-1. Checks `mcp2cli` is available
-2. Configures `mcp2cli bake` to point to your MCP server
-3. Installs the wrapper to `~/.local/bin/scrapling`
-4. Installs the modified official Scrapling skill to `~/.config/opencode/skills/scrapling-official/`
-5. Runs a quick smoke test
 
 ## Usage
 
@@ -114,7 +120,7 @@ The wrapper translates official Scrapling CLI flags to mcp2cli equivalents autom
 ```bash
 cd scrapling-light
 git pull
-bash install.sh --update
+# Re-run the install steps above (bake update + copy files)
 ```
 
 ## License
