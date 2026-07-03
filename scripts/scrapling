@@ -131,7 +131,27 @@ main() {
 
     if [ "${1:-}" = "extract" ]; then shift; fi
 
-    CMD="${1:-}"; [ -n "$CMD" ] || { echo "Usage: scrapling [extract] <command> ..."; exit 2; }
+    CMD="${1:-}"
+    case "$CMD" in
+        -h|--help|help)
+            echo "Usage: scrapling [extract] <command> [options]"
+            echo
+            echo "Commands:"
+            echo "  get              Static GET request"
+            echo "  fetch            Browser fetch (JS rendering)"
+            echo "  stealthy-fetch   Stealth browser fetch (anti-bot)"
+            echo "  bulk-get         Static GET for multiple URLs"
+            echo "  bulk-fetch       Browser fetch for multiple URLs"
+            echo "  bulk-stealthy-fetch  Stealth browser for multiple URLs"
+            echo "  session          Browser session management"
+            echo "  screenshot       Capture page screenshot"
+            echo
+            echo "See 'scrapling <command> --help' for per-command options."
+            echo "Note: not all commands support per-command --help (pass through to backend)."
+            exit 0 ;;
+    esac
+
+    [ -n "$CMD" ] || { echo "Usage: scrapling [extract] <command> ..."; exit 2; }
     shift
 
     case "$CMD" in
@@ -150,8 +170,12 @@ main() {
             ;;
         screenshot)
             IS_SCREENSHOT=true
-            URL="${1:-}"; [ -n "$URL" ] || { echo "Usage: scrapling screenshot <url> [output.png] [options]"; exit 2; }
-            shift
+            if [ -n "${1:-}" ] && [[ "$1" == -* ]]; then
+                URL=""
+            else
+                URL="${1:-}"; [ -n "$URL" ] || { echo "Usage: scrapling screenshot <url> [output.png] [options]"; exit 2; }
+                shift
+            fi
             if [ -n "${1:-}" ] && [[ "$1" != -* ]]; then
                 OUTPUT="$1"; shift
             fi
@@ -162,8 +186,13 @@ main() {
             shift
             ;;
         get|fetch|stealthy-fetch)
-            URL="${1:-}"; [ -n "$URL" ] || { echo "Usage: scrapling extract $CMD <url> [output] [options]"; exit 2; }
-            shift
+            if [ -n "${1:-}" ] && [[ "$1" == -* ]]; then
+                # First arg looks like a flag (e.g. --help), not a URL
+                URL=""
+            else
+                URL="${1:-}"; [ -n "$URL" ] || { echo "Usage: scrapling extract $CMD <url> [output] [options]"; exit 2; }
+                shift
+            fi
             if [ -n "${1:-}" ] && [[ "$1" != -* ]]; then
                 OUTPUT="$1"
                 local et; et=$(pick_extraction_type "$OUTPUT")
@@ -226,6 +255,14 @@ main() {
         translate_args "${MCP_ARGS[@]}"
         MCP_CMD+=("${TRANSLATED[@]}")
     fi
+
+    # Detect --help / -h in args: bypass pipeline, show raw output
+    for arg in "${MCP_ARGS[@]}"; do
+        if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
+            "${MCP_CMD[@]}"
+            exit $?
+        fi
+    done
 
     if $IS_SCREENSHOT; then
         # Screenshot: decode base64 to image
