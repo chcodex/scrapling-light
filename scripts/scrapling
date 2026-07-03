@@ -2,7 +2,6 @@
 set -euo pipefail
 
 MCP_BACKEND="scrapling"
-IS_EXTRACT=false
 
 extract_content() {
     jq -j '(.content // .) | if type == "array" then join("") else tostring end'

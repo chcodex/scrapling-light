@@ -2,7 +2,6 @@
 name: scrapling-light
 description: |
   Scrape or extract content from individual web pages using scrapling, with JavaScript rendering, persistent browser sessions, screenshots, and anti-bot bypass for protected pages. Use when asked to fetch a URL, extract page content, render JavaScript, capture a screenshot, or handle Cloudflare/anti-bot pages. Do not use for broad site crawling or downloading entire documentation sites.
-compatibility: Requires scrapling, mcp2cli, jq, and base64 on PATH.
 allowed-tools: Bash(scrapling *)
 ---
 
