@@ -1,0 +1,273 @@
+#!/bin/bash
+set -euo pipefail
+
+MCP_BACKEND="scrapling"
+IS_EXTRACT=false
+
+extract_content() {
+    python3 -c "
+import sys, json
+# Handle multiple JSON objects (one per line / concatenated)
+text = sys.stdin.read().strip()
+decoder = json.JSONDecoder()
+pos = 0
+while pos < len(text):
+    while pos < len(text) and text[pos] in ' \t\n\r':
+        pos += 1
+    if pos >= len(text):
+        break
+    obj, end = decoder.raw_decode(text, pos)
+    pos = end
+    content = obj.get('content', obj)
+    if isinstance(content, list):
+        sys.stdout.write(''.join(content))
+    else:
+        sys.stdout.write(str(content))
+"
+}
+
+screenshot_output() {
+    python3 -c "
+import sys, json, base64
+raw = sys.stdin.read().strip()
+if raw.startswith('{'):
+    d = json.loads(raw)
+    raw = d.get('content', d)
+    if isinstance(raw, list):
+        raw = ''.join(raw)
+    elif isinstance(raw, dict):
+        raw = str(raw)
+if not raw:
+    sys.exit(1)
+padded = raw + '=' * (-len(raw) % 4)
+sys.stdout.buffer.write(base64.b64decode(padded))
+"
+}
+
+pick_extraction_type() {
+    case "$1" in
+        *.md|*.markdown) echo "markdown" ;;
+        *.html|*.htm)    echo "html" ;;
+        *.txt)           echo "text" ;;
+        *)               echo "" ;;
+    esac
+}
+
+TRANSLATED=()
+TRANSLATE_CMD=""
+translate_args() {
+    TRANSLATED=()
+    local skip_next=false
+    for ((i=1; i<=$#; i++)); do
+        if $skip_next; then skip_next=false; continue; fi
+        case "${!i}" in
+            --ai-targeted)       TRANSLATED+=("--main-content-only") ;;
+            --no-headless|--enable-resources|--no-network-idle) ;;
+            --no-real-chrome|--allow-webrtc|--no-solve-cloudflare) ;;
+            --block-webgl|--show-canvas) ;;
+            --no-follow-redirects) TRANSLATED+=("--follow-redirects" "false") ;;
+            --no-verify)          TRANSLATED+=("--verify" "false") ;;
+            --no-stealthy-headers) TRANSLATED+=("--stealthy-headers" "false") ;;
+            --no-dns-over-https) TRANSLATED+=("--dns-over-https" "false") ;;
+            --no-block-ads)      TRANSLATED+=("--block-ads" "false") ;;
+            -H)
+                local ni=$((i+1))
+                if [ $ni -le $# ]; then
+                    local hval="${!ni}"
+                    local hk="${hval%%:*}"
+                    local hv="${hval#*: }"
+                    hv="${hv#"${hv%%[! ]*}"}"
+                    case "${TRANSLATE_CMD:-get}" in
+                        fetch|stealthy-fetch|bulk-fetch|bulk-stealthy-fetch)
+                            TRANSLATED+=("--extra-headers" "{\"$hk\":\"$hv\"}") ;;
+                        *) TRANSLATED+=("--headers" "{\"$hk\":\"$hv\"}") ;;
+                    esac
+                    skip_next=true
+                fi ;;
+            -s)
+                local ni=$((i+1))
+                if [ $ni -le $# ]; then
+                    TRANSLATED+=("--css-selector" "${!ni}"); skip_next=true
+                fi ;;
+            -p)
+                local ni=$((i+1))
+                if [ $ni -le $# ]; then
+                    local val="${!ni}" k="${val%%=*}" v="${val#*=}"
+                    TRANSLATED+=("--params" "{\"$k\":\"$v\"}"); skip_next=true
+                fi ;;
+            -d)
+                local ni=$((i+1))
+                if [ $ni -le $# ]; then
+                    TRANSLATED+=("--data" "${!ni}"); skip_next=true
+                fi ;;
+            -j)
+                local ni=$((i+1))
+                if [ $ni -le $# ]; then
+                    TRANSLATED+=("--json" "${!ni}"); skip_next=true
+                fi ;;
+            --cookies)
+                local ni=$((i+1))
+                if [ $ni -le $# ]; then
+                    local c="${!ni}" json="{"; local first=true
+                    IFS=';' read -ra pairs <<< "$c"
+                    for pair in "${pairs[@]}"; do
+                        pair="${pair#"${pair%%[! ]*}"}"
+                        pair="${pair%"${pair##*[! ]}"}"
+                        [ -z "$pair" ] && continue
+                        local ck="${pair%%=*}" cv="${pair#*=}"
+                        $first || json+=","; first=false
+                        json+="\"$ck\":\"$cv\""
+                    done
+                    json+="}"
+                    TRANSLATED+=("--cookies" "$json"); skip_next=true
+                fi ;;
+            --params)
+                local ni=$((i+1))
+                if [ $ni -le $# ]; then
+                    local pv="${!ni}"
+                    if [[ "$pv" != \{* ]]; then
+                        local pk="${pv%%=*}" pv2="${pv#*=}"
+                        TRANSLATED+=("--params" "{\"$pk\":\"$pv2\"}")
+                    else
+                        TRANSLATED+=("--params" "$pv")
+                    fi
+                    skip_next=true
+                fi ;;
+            *)  TRANSLATED+=("${!i}") ;;
+        esac
+    done
+}
+
+is_extract_cmd() {
+    case "$1" in get|fetch|stealthy-fetch|bulk-get|bulk-fetch|bulk-stealthy-fetch) return 0 ;; esac
+    return 1
+}
+
+main() {
+    local CMD="" URL="" OUTPUT="" EXTRACTION_TYPE="" SESSION_ID=""
+    local IS_BULK=false IS_SESSION=false IS_SCREENSHOT=false
+    local MCP_ARGS=() MCP_CMD_OVERRIDE=""
+
+    if [ "${1:-}" = "extract" ]; then shift; fi
+
+    CMD="${1:-}"; [ -n "$CMD" ] || { echo "Usage: scrapling [extract] <command> ..."; exit 2; }
+    shift
+
+    case "$CMD" in
+        session)
+            IS_SESSION=true
+            local sub="${1:-}"; [ -n "$sub" ] || { echo "Usage: scrapling session open|close|list"; exit 2; }
+            shift
+            case "$sub" in
+                open)  MCP_CMD_OVERRIDE="open-session" ;;
+                close) MCP_CMD_OVERRIDE="close-session"
+                       SESSION_ID="${1:-}"; [ -n "$SESSION_ID" ] || { echo "Usage: scrapling session close <session-id>"; exit 2; }
+                       shift ;;
+                list)  MCP_CMD_OVERRIDE="list-sessions" ;;
+                *)     echo "Unknown session subcommand: $sub"; exit 2 ;;
+            esac
+            ;;
+        screenshot)
+            IS_SCREENSHOT=true
+            URL="${1:-}"; [ -n "$URL" ] || { echo "Usage: scrapling screenshot <url> [output.png] [options]"; exit 2; }
+            shift
+            if [ -n "${1:-}" ] && [[ "$1" != -* ]]; then
+                OUTPUT="$1"; shift
+            fi
+            ;;
+        bulk-get|bulk-fetch|bulk-stealthy-fetch)
+            IS_BULK=true
+            OUTPUT="${1:-}"; [ -n "$OUTPUT" ] || { echo "Usage: scrapling extract $CMD <output> <url1> <url2> ... [options]"; exit 2; }
+            shift
+            ;;
+        get|fetch|stealthy-fetch)
+            URL="${1:-}"; [ -n "$URL" ] || { echo "Usage: scrapling extract $CMD <url> [output] [options]"; exit 2; }
+            shift
+            if [ -n "${1:-}" ] && [[ "$1" != -* ]]; then
+                OUTPUT="$1"
+                local et; et=$(pick_extraction_type "$OUTPUT")
+                [ -n "$et" ] && EXTRACTION_TYPE="$et"
+                shift
+            fi
+            ;;
+        *)
+            echo "Unknown command: $CMD"
+            echo "Commands: get, fetch, stealthy-fetch, bulk-get, bulk-fetch, bulk-stealthy-fetch, session, screenshot"
+            exit 2 ;;
+    esac
+
+    MCP_ARGS=("$@")
+
+    # Build mcp2cli command name
+    local CMD_NAME="$CMD"
+    if $IS_SESSION; then
+        CMD_NAME="$MCP_CMD_OVERRIDE"
+    elif $IS_SCREENSHOT; then
+        CMD_NAME="screenshot"
+    fi
+
+    local MCP_CMD=(mcp2cli @"$MCP_BACKEND" "$CMD_NAME")
+
+    if [ -n "$URL" ]; then
+        MCP_CMD+=(--url "$URL")
+    fi
+    if [ -n "$SESSION_ID" ]; then
+        MCP_CMD+=(--session-id "$SESSION_ID")
+    fi
+
+    # Bulk: build --urls JSON array
+    if $IS_BULK; then
+        local urls_json="[" first=true
+        for arg in "$@"; do
+            [[ "$arg" == -* ]] && break
+            $first || urls_json+=","
+            first=false
+            urls_json+="\"$arg\""
+        done
+        urls_json+="]"
+        MCP_CMD+=(--urls "$urls_json")
+
+        # Rebuild MCP_ARGS excluding consumed URLs
+        MCP_ARGS=()
+        local consume=true
+        for arg in "$@"; do
+            if $consume && [[ "$arg" != -* ]]; then continue; fi
+            consume=false; MCP_ARGS+=("$arg")
+        done
+    fi
+
+    if [ -n "$EXTRACTION_TYPE" ]; then
+        MCP_CMD+=(--extraction-type "$EXTRACTION_TYPE")
+    fi
+
+    if [ ${#MCP_ARGS[@]} -gt 0 ]; then
+        TRANSLATE_CMD="$CMD"
+        translate_args "${MCP_ARGS[@]}"
+        MCP_CMD+=("${TRANSLATED[@]}")
+    fi
+
+    if $IS_SCREENSHOT; then
+        # Screenshot: decode base64 to image
+        if [ -n "$OUTPUT" ]; then
+            "${MCP_CMD[@]}" 2>/dev/null | screenshot_output > "$OUTPUT"
+        else
+            "${MCP_CMD[@]}" 2>/dev/null | screenshot_output
+        fi
+    elif is_extract_cmd "$CMD"; then
+        # Extract: pull content from JSON envelope
+        if [ -n "$OUTPUT" ]; then
+            "${MCP_CMD[@]}" 2>/dev/null | extract_content > "$OUTPUT"
+        else
+            "${MCP_CMD[@]}" 2>/dev/null | extract_content
+        fi
+    else
+        # Session: raw output
+        if [ -n "$OUTPUT" ]; then
+            "${MCP_CMD[@]}" 2>/dev/null > "$OUTPUT"
+        else
+            "${MCP_CMD[@]}" 2>/dev/null
+        fi
+    fi
+}
+
+main "$@"
