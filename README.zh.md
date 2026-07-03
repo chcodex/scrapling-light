@@ -41,7 +41,7 @@ cd scrapling-light
 
 # 手动安装
 ## 1. 安装 mcp2cli（如未安装）
-pip install mcp2cli
+uv tool install mcp2cli
 
 ## 2. 配置 bake（将 URL 替换为你的 MCP 服务器地址）
 mcp2cli bake create scrapling --mcp http://localhost:8000/mcp
