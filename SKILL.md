@@ -78,11 +78,19 @@ Browser options:
 
 ## Bulk Extraction
 
-Output file first, then URLs:
+Two modes:
+
+**Directory mode** (output ends with `/` or is an existing directory) — auto-names files from URL:
+
+```bash
+scrapling bulk-get /tmp/opencode/pages/ "https://site.com/a" "https://site.com/b" --main-content-only
+# → pages/a.md, pages/b.md
+```
+
+**Merge mode** (output is a file) — all content merged with `## URL:` headers:
 
 ```bash
 scrapling bulk-get /tmp/opencode/results.md "https://site.com/a" "https://site.com/b" --main-content-only
-scrapling bulk-fetch /tmp/opencode/results.md "https://site.com/a" "https://site.com/b" --main-content-only --network-idle
 ```
 
 ## Sessions
@@ -122,3 +130,4 @@ Screenshot options: `--image-type png|jpeg`, `--full-page`, `--quality <0-100>` 
 - `fetch` and `stealthy-fetch` start a browser (slower, handles JS).
 - Bulks do not discover URLs — only extract from provided URLs.
 - Screenshot output is a decoded PNG/JPEG file.
+- **All write operations report feedback**: `✓ url → path (sizeB, status)`. Empty content is skipped (no empty files). Bulk also prints a summary line `--- Done: N URLs, M succeeded, K skipped ---`.
