@@ -317,11 +317,10 @@ main() {
         MCP_CMD+=("${TRANSLATED[@]}")
     fi
 
-    # Detect --help / -h in args: bypass pipeline, show filtered help + wrapper info
+    # Detect --help / -h in args: bypass pipeline, show filtered help + usage notes
     for arg in "${MCP_ARGS[@]}"; do
         local arg_lower="${arg,,}"
         if [[ "$arg_lower" == "--help" || "$arg_lower" == "-h" ]]; then
-            # Build clean help command (ignore user's args, always pass --help)
             local help_cmd=(mcp2cli @"$MCP_BACKEND" "$CMD_NAME" --help)
             set +e
             "${help_cmd[@]}" 2>/dev/null | sed -e 's/mcp2cli/scrapling/g' \
@@ -329,20 +328,20 @@ main() {
                 -e 's/close-session/session close/g' \
                 -e 's/list-sessions/session list/g' || true
             set -e
-            echo ""
             if $IS_BULK; then
-                echo "--- scrapling wrapper ---"
-                echo "Output modes:"
-                echo "  <path/>  Directory: auto-named files per URL"
-                echo "  <file>   Merge: all content with '## URL:' headers"
-                echo "Feedback: '✓ <url> → <path> (<size>B, <status>)'"
-                echo "Summary:  '--- Done: N URLs, M succeeded, K skipped ---'"
+                echo ""
+                echo "Usage notes:"
+                echo "  <path/>  directory mode — auto-named files per URL"
+                echo "  <file>   merge mode — content with '## URL:' headers"
+                echo "  Each URL prints feedback, summary at end."
+                echo "  Empty content skipped, no empty files created."
             elif ! $IS_SESSION && ! $IS_SCREENSHOT; then
-                echo "--- scrapling wrapper ---"
-                echo "Feedback: '✓ <url> → <path> (<size>B, <status>)'"
-                echo "No output path: content to stdout, feedback to stderr"
+                echo ""
+                echo "Usage notes:"
+                echo "  Each write prints feedback '✓ <url> → <path> (<size>B, <status>)'."
+                echo "  Without output path: content to stdout, feedback to stderr."
+                echo "  Empty content skipped, no empty files created."
             fi
-            echo "Empty content skipped, no empty files created."
             exit 0
         fi
     done
