@@ -214,8 +214,12 @@ main() {
             ;;
         bulk-get|bulk-fetch|bulk-stealthy-fetch)
             IS_BULK=true
-            OUTPUT="${1:-}"; [ -n "$OUTPUT" ] || { echo "Usage: scrapling $CMD <output> <url1> <url2> ... [options]"; exit 2; }
-            shift
+            if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+                OUTPUT="/dev/null"
+            else
+                OUTPUT="${1:-}"; [ -n "$OUTPUT" ] || { echo "Usage: scrapling $CMD <output> <url1> <url2> ... [options]"; exit 2; }
+                shift
+            fi
             # For single-file merge mode, detect extraction type from extension
             if [ -d "$OUTPUT" ] || [ "${OUTPUT: -1}" = "/" ]; then
                 :
@@ -295,11 +299,25 @@ main() {
         MCP_CMD+=("${TRANSLATED[@]}")
     fi
 
-    # Detect --help / -h in args: bypass pipeline
+    # Detect --help / -h in args: bypass pipeline, show filtered help + wrapper info
     for arg in "${MCP_ARGS[@]}"; do
         if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
-            "${MCP_CMD[@]}"
-            exit $?
+            "${MCP_CMD[@]}" 2>/dev/null | sed 's/mcp2cli/scrapling/g'
+            echo ""
+            if $IS_BULK; then
+                echo "--- scrapling wrapper ---"
+                echo "Output modes:"
+                echo "  <path/>  Directory: auto-named files per URL"
+                echo "  <file>   Merge: all content with '## URL:' headers"
+                echo "Feedback: '✓ <url> → <path> (<size>B, <status>)'"
+                echo "Summary:  '--- Done: N URLs, M succeeded, K skipped ---'"
+            elif ! $IS_SESSION && ! $IS_SCREENSHOT; then
+                echo "--- scrapling wrapper ---"
+                echo "Feedback: '✓ <url> → <path> (<size>B, <status>)'"
+                echo "No output path: content to stdout, feedback to stderr"
+            fi
+            echo "Empty content skipped, no empty files created."
+            exit 0
         fi
     done
 
