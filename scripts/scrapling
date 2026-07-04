@@ -189,13 +189,30 @@ main() {
     case "$CMD" in
         session)
             IS_SESSION=true
-            local sub="${1:-}"; [ -n "$sub" ] || { echo "Usage: scrapling session open|close|list"; exit 2; }
+            local sub="${1:-}"
+            local sub_lower="${sub,,}"
+            if [ -z "$sub" ] || [ "$sub_lower" = "--help" ] || [ "$sub_lower" = "-h" ]; then
+                echo "Usage: scrapling session <subcommand> [options]"
+                echo ""
+                echo "Subcommands:"
+                echo "  open   Open a browser session"
+                echo "  close  Close a session (requires <session-id>)"
+                echo "  list   List all open sessions"
+                echo ""
+                echo "See 'scrapling session <subcommand> --help' for details."
+                exit 0
+            fi
             shift
             case "$sub" in
                 open)  MCP_CMD_OVERRIDE="open-session" ;;
                 close) MCP_CMD_OVERRIDE="close-session"
-                       SESSION_ID="${1:-}"; [ -n "$SESSION_ID" ] || { echo "Usage: scrapling session close <session-id>"; exit 2; }
-                       shift ;;
+                       local close_first="${1:-}"; close_first="${close_first,,}"
+                       if [ "$close_first" = "--help" ] || [ "$close_first" = "-h" ]; then
+                           : # let --help flow to MCP_ARGS
+                       else
+                           SESSION_ID="${1:-}"; [ -n "$SESSION_ID" ] || { echo "Usage: scrapling session close <session-id>"; exit 2; }
+                           shift
+                       fi ;;
                 list)  MCP_CMD_OVERRIDE="list-sessions" ;;
                 *)     echo "Unknown session subcommand: $sub"; exit 2 ;;
             esac
@@ -214,7 +231,8 @@ main() {
             ;;
         bulk-get|bulk-fetch|bulk-stealthy-fetch)
             IS_BULK=true
-            if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+            local bulk_first="${1:-}"; bulk_first="${bulk_first,,}"
+            if [ "$bulk_first" = "--help" ] || [ "$bulk_first" = "-h" ]; then
                 OUTPUT="/dev/null"
             else
                 OUTPUT="${1:-}"; [ -n "$OUTPUT" ] || { echo "Usage: scrapling $CMD <output> <url1> <url2> ... [options]"; exit 2; }
@@ -301,8 +319,16 @@ main() {
 
     # Detect --help / -h in args: bypass pipeline, show filtered help + wrapper info
     for arg in "${MCP_ARGS[@]}"; do
-        if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
-            "${MCP_CMD[@]}" 2>/dev/null | sed 's/mcp2cli/scrapling/g'
+        local arg_lower="${arg,,}"
+        if [[ "$arg_lower" == "--help" || "$arg_lower" == "-h" ]]; then
+            # Build clean help command (ignore user's args, always pass --help)
+            local help_cmd=(mcp2cli @"$MCP_BACKEND" "$CMD_NAME" --help)
+            set +e
+            "${help_cmd[@]}" 2>/dev/null | sed -e 's/mcp2cli/scrapling/g' \
+                -e 's/open-session/session open/g' \
+                -e 's/close-session/session close/g' \
+                -e 's/list-sessions/session list/g' || true
+            set -e
             echo ""
             if $IS_BULK; then
                 echo "--- scrapling wrapper ---"
